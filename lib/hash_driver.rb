@@ -1,7 +1,15 @@
+require 'multicaster'
 module Multiball
 	class HashDriver
+		extend Multicaster
 
 		attr_accessor :hash
+
+		multi_method :hash, :merge!, :[]
+
+		def hashie
+			hash
+		end
 
 		def initialize(config)
 			raise "No config!" if config.nil?
