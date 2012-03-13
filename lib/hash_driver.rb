@@ -5,7 +5,7 @@ module Multiball
 
 		attr_accessor :hash
 
-		multi_method :hash, :merge!, :[]
+		multi_method :hash, :merge!, :[]=
 
 		def hashie
 			hash

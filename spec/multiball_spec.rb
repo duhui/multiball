@@ -43,6 +43,21 @@ describe Multiball do
     ball1.collect{|k,v| [k,v] }.flatten.should eq(%w[foo bar])
   end
 
+  it "should multicast" do
+  	Multiball.driver=Multiball::HashDriver
+  	Multiball.set_config!({ :one => {:config=>{}}, :two => {:config=>{}}})
+	ball1 = Multiball::Ball.new
+    ball1["foo"]="bar"
+    ball1.merge!({'bar' => 'foo'})
+    ball1.hashie.should eq({"foo" => "bar", "bar" => "foo"})
+    Multiball.servers.each do |key,server| 
+    	if server.hashie != {"foo" => "bar", "bar" => "foo"}
+    		raise "!? #{key} - #{server} #{server.hashie}"
+    	end
+    	server.send(:hashie).should eq({"foo" => "bar", "bar" => "foo"})
+    end
+  end
+
   it "should have a retrieve mechanism" do
     Multiball.should respond_to(:get)
   end
