@@ -22,6 +22,7 @@ class Multiball
     end
   end
 
+  #You could really turn this into some generic mechanism and make redis just a 'driver'
   def self.get_server(config)
     Redis.new config
   end
