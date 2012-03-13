@@ -51,9 +51,6 @@ describe Multiball do
     ball1.merge!({'bar' => 'foo'})
     ball1.hashie.should eq({"foo" => "bar", "bar" => "foo"})
     Multiball.servers.each do |key,server| 
-    	if server.hashie != {"foo" => "bar", "bar" => "foo"}
-    		raise "!? #{key} - #{server} #{server.hashie}"
-    	end
     	server.send(:hashie).should eq({"foo" => "bar", "bar" => "foo"})
     end
   end
