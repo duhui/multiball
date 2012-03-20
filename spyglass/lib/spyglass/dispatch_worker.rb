@@ -8,8 +8,8 @@ module Spyglass
     WRITE_OPERATIONS=[:set]
 
 
-    def initialize(socket, writable_pipe, redis_config, connection = nil)
-      @socket, @writable_pipe, @redis_config= socket,  writable_pipe, redis_config
+    def initialize(socket, writable_pipe, connection = nil)
+      @socket, @writable_pipe, @redis_config= socket,  writable_pipe, Config.redis_hosts
       @read_read_pipe, @read_write_pipe = IO.pipe
       @read_read2_pipe, @read_write2_pipe = IO.pipe
       @write_read_pipe, @write_write_pipe = IO.pipe
@@ -30,16 +30,16 @@ module Spyglass
       end
     end
 
-    def spawn_read_workers
-      3.times do 
-        @read_worker_pids << fork { ReadWorker.new(@read_read_pipe, @read_write_pipe, @read_read2_pipe, @read_write2_pipe, @redis_config).start }
+    def spawn_read_workers 
+      @redis_config.each do |redis|
+        @read_worker_pids << fork { ReadWorker.new(@read_read_pipe, @read_write_pipe, @read_read2_pipe, @read_write2_pipe, redis).start }
       end
     end
 
     def spawn_write_workers
-      3.times do
+      @redis_config.each do |redis|
         @write_pipes << IO.pipe 
-        @write_worker_pids << fork { WriteWorker.new(@write_pipes.last.first, @write_write_pipe, @write_read2_pipe, @write_write2_pipe, @redis_config).start }
+        @write_worker_pids << fork { WriteWorker.new(@write_pipes.last.first, @write_write_pipe, @write_read2_pipe, @write_write2_pipe, redis).start }
       end
     end
 

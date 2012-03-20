@@ -59,9 +59,7 @@ module Spyglass
     end
 
     def spawn_worker(connection = nil)
-      Config.redis_hosts.each {|host| 
-          @worker_pids << fork { DispatchWorker.new(@socket, @writable_pipe, host, connection).start }
-      }
+      @worker_pids << fork { DispatchWorker.new(@socket, @writable_pipe, connection).start }
     end
 
     def trap_signals

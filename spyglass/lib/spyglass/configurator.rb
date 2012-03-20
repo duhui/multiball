@@ -9,7 +9,8 @@ module Spyglass
       :config_ru_path => 'config.ru',
       :verbose => false,
       :vverbose => false,
-      :redis_hosts => [{:host => "localhost", :port => 6379}]
+      :redis_hosts => [{:host => "localhost", :port => 6379}, 
+                       {:host => "localhost", :port => 6667}]
     }
     
     class << self
