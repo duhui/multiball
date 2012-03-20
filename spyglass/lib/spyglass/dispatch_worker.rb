@@ -54,13 +54,18 @@ module Spyglass
       # This reads data in from the client connection. We'll read up to 
       # 10000 bytes at the moment.
       data = conn.readpartial(10000)
+      @data = data
       array = Marshal.load(data)
       dispatch_command(array.first,data)
 
       #first element is the command
 
       rp = IO.select([@read_read2_pipe, @write_read2_pipe]) #need some improved mechanism?
-      rp.each{|r| conn.write(r[0].readpartial(10000)) if r.any? }
+      rp.each do |r| 
+        if r.any?
+          conn.write(r[0].readpartial(10000)) 
+        end
+      end
       #conn.write @read_read2_pipe.readpartial(10000)
       out "WRITE COMPLETE"
       # Since keepalive is not supported we can close the client connection
@@ -87,6 +92,18 @@ module Spyglass
     end
 
     def trap_signals
+      trap(:CHLD) do
+        out "CHILD PERISHED!"
+        dead_worker, status = Process.wait2
+        if status.exitstatus != 0 #he's dead Jim
+          if @read_worker_pids.delete(dead_worker)
+            out "rewinding pipe, so new worker will pick up."
+            read_dispatch(@data) #thinking this means the arg is not necessary, but I wanna be sure. 
+                                 #A dispatch is in this case tightly coupled; can't move on until a read has returned successfully and only one read at a time. 
+          end
+        end
+      end
+
       trap(:QUIT) do
         out "Received QUIT"
         exit
