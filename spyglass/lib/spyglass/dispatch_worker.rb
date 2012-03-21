@@ -9,12 +9,14 @@ module Spyglass
 
 
     def initialize(socket, writable_pipe, connection = nil)
+      @dead_socket, @risen_socket = Socket.pair(:UNIX, :STREAM)      
+      fork { PhoenixPatrol.new(@dead_socket).start}
       @socket, @writable_pipe, @redis_config= socket,  writable_pipe, Config.redis_hosts
       @read_read_pipe, @read_write_pipe = IO.pipe
       @read_read2_pipe, @read_write2_pipe = IO.pipe
       @write_read_pipe, @write_write_pipe = IO.pipe
       @write_read2_pipe, @write_write2_pipe = IO.pipe
-      @read_worker_pids=[]
+      @read_worker_pids={}
       @write_worker_pids=[]
       @write_pipes=[]
       spawn_read_workers
@@ -32,8 +34,13 @@ module Spyglass
 
     def spawn_read_workers 
       @redis_config.each do |redis|
-        @read_worker_pids << fork { ReadWorker.new(@read_read_pipe, @read_write_pipe, @read_read2_pipe, @read_write2_pipe, redis).start }
+        spawn_read_worker(redis)
       end
+    end
+
+    def spawn_read_worker(redis)
+        pid = fork { ReadWorker.new(@read_read_pipe, @read_write_pipe, @read_read2_pipe, @read_write2_pipe, redis).start }
+        @read_worker_pids[pid] =redis 
     end
 
     def spawn_write_workers
@@ -96,12 +103,22 @@ module Spyglass
         out "CHILD PERISHED!"
         dead_worker, status = Process.wait2
         if status.exitstatus != 0 #he's dead Jim
-          if @read_worker_pids.delete(dead_worker)
-            out "rewinding pipe, so new worker will pick up."
+          if (config = @read_worker_pids.delete(dead_worker))
+            out "redispatching, so new worker will pick up."
             read_dispatch(@data) #thinking this means the arg is not necessary, but I wanna be sure. 
                                  #A dispatch is in this case tightly coupled; can't move on until a read has returned successfully and only one read at a time. 
+            @risen_socket.write Marshal.dump(config)
           end
         end
+      end
+
+
+      trap(:USR1) do
+        out 'Respawning...' #IT IS RISEN!
+        config = Marshal.load(@risen_socket.recv(10000))
+        out "#{config} is back online. Spawning..."
+        spawn_read_worker(config)
+        out "Spawn complete."
       end
 
       trap(:QUIT) do
