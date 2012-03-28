@@ -47,7 +47,7 @@ require 'spyglass/dispatch_worker'
 require 'spyglass/read_worker'
 require 'spyglass/write_worker'
 require 'spyglass/phoenix_patrol'
-
+require 'spyglass/lockable'
 
 module Spyglass
   Version = '0.1.1'
