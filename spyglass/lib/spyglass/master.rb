@@ -24,7 +24,7 @@ module Spyglass
 
       load_app
       out "Loaded the app"
-
+      launch_phoenix_patrol
       # The first worker we spawn has to handle the connection that was already
       # passed to us.
       spawn_worker(@connection)
@@ -59,7 +59,7 @@ module Spyglass
     end
 
     def spawn_worker(connection = nil)
-      @worker_pids << fork { DispatchWorker.new(@socket, @writable_pipe, connection).start }
+      @worker_pids << fork { DispatchWorker.new(@socket, @writable_pipe, @dead_write, connection).start }
     end
 
     def trap_signals
@@ -95,6 +95,16 @@ module Spyglass
 
         spawn_worker
       end
+    end
+
+    def launch_phoenix_patrol
+      @dead_read, @dead_write = IO.pipe
+      fork { PhoenixPatrol.new(@dead_read).start }
+    end
+
+    def restart_workers
+
+      #Process.kill(:HUP)
     end
     
     def kill_workers(sig)

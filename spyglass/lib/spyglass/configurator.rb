@@ -4,7 +4,7 @@ module Spyglass
     OPTIONS = {
       :port => 4222,
       :host => '0.0.0.0',
-      :workers => 2,
+      :workers => 5,
       :timeout => 300,
       :config_ru_path => 'config.ru',
       :verbose => false,

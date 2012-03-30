@@ -2,7 +2,7 @@ module Spyglass
   class PhoenixPatrol
     include Logging
     include Lockable
-    #no need to fork off dispatch but that's what Im doing atm
+
     def initialize(dead_socket)
       @dead_socket = dead_socket
       @purgatory = []
@@ -10,12 +10,14 @@ module Spyglass
 
     def start
       trap_signals
+      out 'starting patrol'
       loop do
         rs = IO.select([@dead_socket], [], [], 10)
         unless rs.nil? || rs.empty?
-          data = rs[0][0].recv(10000)
+          data = rs[0][0].readpartial(10000)
           out "THE DATA #{data.inspect}"
-          @purgatory << Marshal.load(data)
+          indata = Marshal.load(data)
+          @purgatory << indata unless @purgatory.include?(indata)
           out "SOMEONE HAS GONE DOWN! #{@purgatory.inspect}"
         end
         out "Beginning sweep #{@purgatory.inspect}"
