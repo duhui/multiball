@@ -4,6 +4,10 @@ module Spyglass
       !@redis.get('sync.lock').nil?
     end
 
+    def release_lock
+      @redis.del 'sync.lock'
+    end
+
     def acquire_lock?
       if @redis.setnx 'sync.lock', Time.now.to_i+1001
         true

@@ -73,6 +73,12 @@ module Spyglass
         exit
       end
 
+      [:USR1, :USR2].each do |sig|
+        trap(sig) do
+          @worker_pids.each {|pid| Process.kill(sig, pid)}
+        end
+      end
+
       trap(:CHLD) do
         dead_worker, status = Process.wait2
         p "dead babies!?! #{status.inspect}" #we'll want those child forks to do something other than die like that, else thrashing

@@ -5,10 +5,12 @@ module Spyglass
       :port => 4222,
       :host => '0.0.0.0',
       :workers => 2,
-      :timeout => 30,
+      :timeout => 300,
       :config_ru_path => 'config.ru',
       :verbose => false,
       :vverbose => false,
+      :multicast_address => "225.99.99.99", 
+      :multicast_port => 6370,
       :redis_hosts => [{:host => "localhost", :port => 6379}, 
                        {:host => "localhost", :port => 6667}]
     }

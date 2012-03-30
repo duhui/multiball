@@ -6,7 +6,10 @@ module Spyglass
     # a socket object.
     def start(socket)
       trap_signals
-
+      fork do
+        WriteLockListener.new
+      end
+      
       # The Lookout doesn't know anything about the app itself, so there's
       # no app related setup to do here.
       loop do
@@ -30,6 +33,9 @@ module Spyglass
         # handle is now cleaned up it's up to the Master process to ensure that
         # its handle gets cleaned up.
         conn.close
+
+
+
         # Now this process blocks until the Master process exits. The Master process
         # will only exit once traffic is slow enough that it has reached its timeout
         # without receiving any new connections.
@@ -68,6 +74,12 @@ module Spyglass
     end
 
     def trap_signals
+      puts "SUP!"
+      [:USR1, :USR2].each do |sig|
+        trap(sig) do
+          Process.kill(sig, @master_pid)
+        end
+      end
       [:INT, :QUIT].each do |sig|
         trap(sig) { 
           begin

@@ -22,6 +22,7 @@ module Spyglass
       spawn_read_workers
       spawn_write_workers
       handle_connection(connection) if connection
+      @write_lock = false
     end
 
     def start
@@ -51,13 +52,12 @@ module Spyglass
     end
 
     def handle_connection(conn)
-        verbose "Received connection"
+      out "Received connection"
       # This notifies our Master that we have received a connection, expiring
       # it's `IO.select` and preventing it from timing out.
       @writable_pipe.write_nonblock('.')
 
       #redis=Redis.new(@redis_config)
-      out 'PREPARE THE READ'
       # This reads data in from the client connection. We'll read up to 
       # 10000 bytes at the moment.
       data = conn.readpartial(10000)
@@ -67,6 +67,11 @@ module Spyglass
 
       #first element is the command
 
+
+      #the pools should manage the connection themselves so that when we lock, reads still happen.
+
+
+
       rp = IO.select([@read_read2_pipe, @write_read2_pipe]) #need some improved mechanism?
       rp.each do |r| 
         if r.any?
@@ -74,16 +79,15 @@ module Spyglass
         end
       end
       #conn.write @read_read2_pipe.readpartial(10000)
-      out "WRITE COMPLETE"
       # Since keepalive is not supported we can close the client connection
       # immediately after writing the body.
       conn.close
+      out 'Connection closed'
 
-      out "Closed connection"
     end
 
     def write_dispatch(data)
-      p 'writing data!'
+      sleep 1 while @write_lock 
       @write_pipes.each do |pipe_pair|
         pipe_pair.last.write data
       end
@@ -111,7 +115,14 @@ module Spyglass
           end
         end
       end
-
+      trap(:USR1) do
+        puts "Pausing writes."
+        @write_lock = true
+      end
+      trap(:USR2) do
+        puts "Resuming writes."
+        @write_lock = false
+      end
 
       trap(:USR1) do
         out 'Respawning...' #IT IS RISEN!

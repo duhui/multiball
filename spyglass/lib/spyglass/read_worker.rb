@@ -4,11 +4,13 @@
 module Spyglass
   class ReadWorker
     include Logging
+    include Lockable
 
 
     def initialize(read_read_pipe, read_write_pipe, read_read2_pipe, read_write2_pipe, redis_config)
       @read_read_pipe, @read_write_pipe, @read_read2_pipe, @read_write2_pipe, @redis_config = read_read_pipe, read_write_pipe, read_read2_pipe, read_write2_pipe, redis_config
       @redis = Redis.new(redis_config)
+      exit if is_locked?
     end
 
     def start
@@ -16,10 +18,8 @@ module Spyglass
 
       loop do
         while(data = @read_read_pipe.readpartial(10000)) do
-          out 'WE GET SIGNAL!'
           array = Marshal.load(data)
           result = dispatch(array)
-          out "RESULT! #{result}"
           @read_write2_pipe.write Marshal.dump(result)
         end
       end
