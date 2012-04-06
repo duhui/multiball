@@ -7,8 +7,8 @@ module Spyglass
     include Lockable
 
 
-    def initialize(write_read_pipe, write_write_pipe, write_read2_pipe, write_write2_pipe, redis_config)
-      @write_read_pipe, @write_write_pipe, @write_read2_pipe, @write_write2_pipe, @redis_config = write_read_pipe, write_write_pipe, write_read2_pipe, write_write2_pipe, redis_config
+    def initialize(write_read_pipe, write_write2_pipe, redis_config)
+      @write_read_pipe, @write_write2_pipe, @redis_config = write_read_pipe, write_write2_pipe, redis_config
       @redis = Redis.new(redis_config)
       exit if is_locked?
     end
@@ -18,15 +18,16 @@ module Spyglass
 
       loop do
         while(data = @write_read_pipe.readpartial(10000)) do
-          array = Marshal.load(data)
+          array = data #Marshal.load(data)
           result = dispatch(array)
-          @write_write2_pipe.write Marshal.dump(result)
+          @write_write2_pipe.write result
         end
       end
     end
 
     def dispatch(array)
-      @redis.send(array.shift, *array)
+      @redis.client.connection.instance_variable_get("@sock").write(array)
+      @redis.client.connection.instance_variable_get("@sock").recv(10000)
     end
 
     def trap_signals

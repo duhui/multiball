@@ -19,15 +19,16 @@ module Spyglass
 
       loop do
         while(data = @read_read_pipe.readpartial(10000)) do
-          array = Marshal.load(data)
+          array = data #Marshal.load(data)
           result = dispatch(array)
-          @read_write2_pipe.write Marshal.dump(result)
+          @read_write2_pipe.write result
         end
       end
     end
 
     def dispatch(array)
-      @redis.send(array.shift, *array)
+      @redis.client.connection.instance_variable_get("@sock").write(array)
+      @redis.client.connection.instance_variable_get("@sock").recv(10000)
     end
 
     def trap_signals

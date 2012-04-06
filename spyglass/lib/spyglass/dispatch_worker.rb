@@ -5,6 +5,8 @@ module Spyglass
   class DispatchWorker
     include Logging
 
+    COMMAND_DELIMITER = "\r\n"
+
     WRITE_OPERATIONS=[:set]
 
 
@@ -17,7 +19,8 @@ module Spyglass
       @write_read2_pipe, @write_write2_pipe = IO.pipe
       @read_worker_pids={}
       @write_worker_pids={}
-      @write_pipes=[]
+      @write_query_pipes=[]
+      @write_response_pipes=[]
       spawn_read_workers
       spawn_write_workers
       handle_connection(connection) if connection
@@ -28,7 +31,9 @@ module Spyglass
       trap_signals
 
       loop do
+        out 'looping!'
         handle_connection @socket.accept
+        out 'done'
       end
     end
 
@@ -45,14 +50,16 @@ module Spyglass
 
     def spawn_write_workers
       @redis_config.each do |redis|
-        @write_pipes << IO.pipe
-        pid = fork { WriteWorker.new(@write_pipes.last.first, @write_write_pipe, @write_read2_pipe, @write_write2_pipe, redis).start }
+        @write_query_pipes << IO.pipe
+        write_response_pipe=IO.pipe
+        pid = fork { WriteWorker.new(@write_query_pipes.last.first, write_response_pipe.last, redis).start }
+        @write_response_pipes << write_response_pipe.first
         @write_worker_pids[pid] = redis
       end
     end
 
     def handle_connection(conn)
-    #  out "Received connection"
+      out "Received connection"
       # This notifies our Master that we have received a connection, expiring
       # it's `IO.select` and preventing it from timing out.
       @writable_pipe.write_nonblock('.')
@@ -61,52 +68,71 @@ module Spyglass
       # This reads data in from the client connection. We'll read up to
       # 10000 bytes at the moment.
       begin
+        rs, ws, es = IO.select([conn], [], [], 5)
+        if(rs.nil? || rs.empty?)
+          conn.close
+          return
+        end
+
         data = conn.readpartial(10000)
-        @data = data
-        array = Marshal.load(data)
-        dispatch_command(array.first,data)
+
+        @data = parse_data_stream(data)
+        dispatch_command(@data.first,data)
 
         #first element is the command
 
-
         #the pools should manage the connection themselves so that when we lock, reads still happen.
-
-
-
-        rp = IO.select([@read_read2_pipe, @write_read2_pipe]) #need some improved mechanism?
+        rp = IO.select([@read_read2_pipe, *@write_response_pipes]) #need some improved mechanism?
         rp.each do |r|
           if r.any?  
-            conn.write(r[0].readpartial(10000))
+            res=r[0].readpartial(10000)
+            #res.
+            conn.write(res)
           end
         end
         #conn.write @read_read2_pipe.readpartial(10000)
         # Since keepalive is not supported we can close the client connection
         # immediately after writing the body.
-        conn.close
+        #out 'process complete, closing!'
+        #conn.close
+        handle_connection(conn) #honor default 5s timeout
      #   out 'Connection closed'
       rescue Errno::EPIPE
         out 'Communication between dispatch and workers seems hosed. Committing seppuku.'
-      rescue 
-        out 'swall'
+      rescue Exception => e 
+        out "Incoming data unprocessable: #{data} with #{e}"
         #swallow...may have closed client side etc.
       end
 
     end
 
     def write_dispatch(data)
+            out "data for dispatch?: #{data}"
+
       sleep 1 while @write_lock
-      @write_pipes.each do |pipe_pair|
+      @write_query_pipes.each do |pipe_pair|
         pipe_pair.last.write data
       end
       #@write_write_pipe
     end
 
     def read_dispatch(data)
+      out "data for dispatch?: #{data}"
       @read_write_pipe.write data
     end
 
     def dispatch_command(command,data)
       (WRITE_OPERATIONS.include?(command) ? write_dispatch(data) : read_dispatch(data))
+    end
+
+    #TODO: Pull out to module
+    def parse_data_stream(data)
+      out "COMMAND DELIMITED! #{data.split(COMMAND_DELIMITER).size}"
+      data_array=data.split(COMMAND_DELIMITER)
+
+      data_array=data.split(COMMAND_DELIMITER).drop(1).each_slice(2).collect{|i| i.last}
+      data_array[0] = data_array.first.to_sym
+      data_array
     end
 
     def trap_signals
@@ -141,7 +167,7 @@ module Spyglass
           Process.kill(:HUP, pid)
           dead_worker, status = Process.waitpid2(pid)
         end
-        @write_pipes = []
+        @write_query_pipes = []
         @write_worker_pids={}
         spawn_write_workers
         out "ReSpawn complete."
