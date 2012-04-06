@@ -4,6 +4,7 @@
 module Spyglass
   class DispatchWorker
     include Logging
+    include RedisParser
 
     COMMAND_DELIMITER = "\r\n"
 
@@ -60,6 +61,9 @@ module Spyglass
 
     def handle_connection(conn)
       out "Received connection"
+      begin
+        while(rs = IO.select([conn], [], [], 5))
+        
       # This notifies our Master that we have received a connection, expiring
       # it's `IO.select` and preventing it from timing out.
       @writable_pipe.write_nonblock('.')
@@ -67,15 +71,11 @@ module Spyglass
       #redis=Redis.new(@redis_config)
       # This reads data in from the client connection. We'll read up to
       # 10000 bytes at the moment.
-      begin
-        rs, ws, es = IO.select([conn], [], [], 5)
-        if(rs.nil? || rs.empty?)
-          conn.close
-          return
+
+        data = read_data_chunk(conn)
+        if data.nil? || data.empty?
+          next
         end
-
-        data = conn.readpartial(10000)
-
         @data = parse_data_stream(data)
         dispatch_command(@data.first,data)
 
@@ -93,22 +93,20 @@ module Spyglass
         #conn.write @read_read2_pipe.readpartial(10000)
         # Since keepalive is not supported we can close the client connection
         # immediately after writing the body.
-        #out 'process complete, closing!'
+        out 'process complete'
         #conn.close
-        handle_connection(conn) #honor default 5s timeout
+      end
      #   out 'Connection closed'
       rescue Errno::EPIPE
         out 'Communication between dispatch and workers seems hosed. Committing seppuku.'
       rescue Exception => e 
-        out "Incoming data unprocessable: #{data} with #{e}"
+        out "Incoming data unprocessable: #{data} with #{e.backtrace}"
         #swallow...may have closed client side etc.
       end
 
     end
 
     def write_dispatch(data)
-            out "data for dispatch?: #{data}"
-
       sleep 1 while @write_lock
       @write_query_pipes.each do |pipe_pair|
         pipe_pair.last.write data
@@ -117,7 +115,6 @@ module Spyglass
     end
 
     def read_dispatch(data)
-      out "data for dispatch?: #{data}"
       @read_write_pipe.write data
     end
 
@@ -127,7 +124,7 @@ module Spyglass
 
     #TODO: Pull out to module
     def parse_data_stream(data)
-      out "COMMAND DELIMITED! #{data.split(COMMAND_DELIMITER).size}"
+      out "COMMAND DELIMITED! #{data}"
       data_array=data.split(COMMAND_DELIMITER)
 
       data_array=data.split(COMMAND_DELIMITER).drop(1).each_slice(2).collect{|i| i.last}

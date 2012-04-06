@@ -11,8 +11,8 @@ module Spyglass
       :vverbose => false,
       :multicast_address => "225.99.99.99", 
       :multicast_port => 6370,
-      :redis_hosts => [{:host => "localhost", :port => 6379}, 
-                       {:host => "localhost", :port => 6667}]
+      :redis_hosts => [{:host => "0.0.0.0", :port => 6379}, 
+                       {:host => "0.0.0.0", :port => 6667}]
     }
     
     class << self

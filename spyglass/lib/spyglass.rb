@@ -39,6 +39,7 @@ require 'stringio'
 require 'redis'
 require 'ipaddr'
 
+require 'spyglass/redis_parser'
 require 'spyglass/configurator'
 require 'spyglass/lockable'
 require 'spyglass/logging'
